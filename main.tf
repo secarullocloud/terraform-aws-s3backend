@@ -1,8 +1,4 @@
-# Main root module
-
-provider "aws" {
-  region = var.region
-}
+# AWS S3 backend module
 
 data "aws_region" "current" {}
 
@@ -11,6 +7,7 @@ resource "random_string" "rand" {
   special = false
   upper   = false
 }
+
 locals {
   namespace = substr(join("-", [var.namespace, random_string.rand.result]), 0, 24)
 }
@@ -40,21 +37,24 @@ resource "aws_kms_key" "kms_key" {
     ResourceGroup = local.namespace
   }
 }
+
 resource "aws_s3_bucket" "s3_bucket" {
   bucket        = "${local.namespace}-state-bucket"
   force_destroy = var.force_destroy_state
 
-  server_side_encryption_configuration {
-    rule {
-      apply_server_side_encryption_by_default {
-        sse_algorithm     = "aws:kms"
-        kms_master_key_id = aws_kms_key.kms_key.arn
-      }
-    }
-  }
-
   tags = {
     ResourceGroup = local.namespace
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "sse" {
+  bucket = aws_s3_bucket.s3_bucket.bucket
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.kms_key.arn
+      sse_algorithm     = "aws:kms"
+    }
   }
 }
 
@@ -67,7 +67,7 @@ resource "aws_s3_bucket_public_access_block" "s3_bucket" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_versioning" "versioning_example" {
+resource "aws_s3_bucket_versioning" "s3_versioning" {
   bucket = aws_s3_bucket.s3_bucket.id
   versioning_configuration {
     status = "Enabled"
